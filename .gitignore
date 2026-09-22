@@ -1,0 +1,5 @@
+compile_commands.json
+build/
+.clangd
+.DS_Store
+third_party/
