@@ -8,6 +8,7 @@ dependencies=(
   "https://github.com/bkaradzic/bx.git"
   "https://github.com/bkaradzic/bimg.git"
   "https://github.com/glfw/glfw.git"
+  "https://github.com/g-truc/glm.git"
 )
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

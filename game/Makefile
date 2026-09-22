@@ -54,7 +54,7 @@ TARGET = $(OBJDIR)/bgeTestGame
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS) ../build/engine/libengine.a ../build/third_party/libimgui.a ../build/third_party/libglfw.a
+$(TARGET): $(OBJS) ../build/engine/libengine.a ../build/third_party/libimgui.a ../build/third_party/libglfw.a $(BGFX_BINDIR)/libbgfxRelease.a $(BGFX_BINDIR)/libbimgRelease.a $(BGFX_BINDIR)/libbxRelease.a
 	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
 $(OBJDIR)/%.o: src/%.cc

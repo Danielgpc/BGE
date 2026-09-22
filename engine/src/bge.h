@@ -1,13 +1,24 @@
 #ifndef BGE_H
 #define BGE_H
 
+#include <GLFW/glfw3.h>
+#include <bgfx/bgfx.h>
+
+class ShaderProgram;
+
 class BGE {
 public:
   BGE();
   ~BGE();
+  int init();
+  int run();
+  int shutdown();
 
 private:
-  void printHello();
+  GLFWwindow *initWindow();
+  GLFWwindow *window;
+  ShaderProgram *shaderProgram = nullptr;
+  int initBGFX(GLFWwindow *window);
 };
 
 #endif // !BGE_H

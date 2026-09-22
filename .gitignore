@@ -2,4 +2,7 @@ compile_commands.json
 build/
 .clangd
 .DS_Store
-third_party/
+third_party/*
+!third_party/Makefile
+shaders/*
+!shaders/Makefile
