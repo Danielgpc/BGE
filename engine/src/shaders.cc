@@ -1,5 +1,6 @@
 #include "shaders.h"
 #include "bgfx/bgfx.h"
+#include <Logger.h>
 
 #include <fstream>
 #include <iostream>
@@ -17,7 +18,7 @@ ShaderProgram::~ShaderProgram() { bgfx::destroy(ShaderProgramHandle); }
 bgfx::ShaderHandle ShaderProgram::createShader(const char *filename) {
   std::ifstream file(filename, std::ios::binary);
   if (!file) {
-    std::cerr << "Failed to open shader: " << filename << std::endl;
+    LogError << "Failed to open shader: " << filename << std::endl;
     return BGFX_INVALID_HANDLE;
   }
   file.seekg(0, std::ios::end);
@@ -30,7 +31,7 @@ bgfx::ShaderHandle ShaderProgram::createShader(const char *filename) {
   bgfx::ShaderHandle shader =
       bgfx::createShader(bgfx::copy(fileBuffer.data(), fileSize));
   if (!bgfx::isValid(shader)) {
-    std::cerr << "Failed to create shader: " << filename << std::endl;
+    LogError << "Failed to create shader: " << filename << std::endl;
   }
   file.close();
   return shader;

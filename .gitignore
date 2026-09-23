@@ -4,5 +4,3 @@ build/
 .DS_Store
 third_party/*
 !third_party/Makefile
-shaders/*
-!shaders/Makefile

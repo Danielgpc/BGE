@@ -2,7 +2,8 @@
 
 int main() {
   BGE instance;
-  instance.init();
+  if (instance.init() != 0)
+    return 1;
   instance.run();
   instance.shutdown();
   return 0;

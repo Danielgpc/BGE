@@ -16,7 +16,8 @@ public:
 
 private:
   GLFWwindow *initWindow();
-  GLFWwindow *window;
+  GLFWwindow *window = nullptr;
+  bool bgfxInitialized = false;
   ShaderProgram *shaderProgram = nullptr;
   int initBGFX(GLFWwindow *window);
 };

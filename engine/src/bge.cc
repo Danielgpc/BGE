@@ -2,10 +2,12 @@
 
 #include "config.h"
 #include "defines.h"
+#include "image.h"
 #include "mutils.h"
 #include "shaders.h"
 
 #include <GLFW/glfw3.h>
+#include <Logger.h>
 #include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
 
@@ -33,10 +35,10 @@ BGE::~BGE() = default;
 
 // Demo Square
 u16 indices[6] = {3, 2, 0, 2, 1, 0};
-mutils::Vertex vertices[4] = {{{-0.5f, 0.5f, 0.0f}, 0xff0000ff, {0.0f, 0.0f}},
-                              {{0.5f, 0.5f, 0.0f}, 0x00ff00ff, {1.0f, 0.0f}},
-                              {{0.5f, -0.5f, 0.0f}, 0x0000ffff, {1.0f, 1.0f}},
-                              {{-0.5f, -0.5f, 0.0f}, 0xff00ffff, {0.0f, 1.0f}}};
+mutils::Vertex vertices[4] = {{{-0.5f, 0.5f, 0.0f}, 0xffffffff, {0.0f, 0.0f}},
+                              {{0.5f, 0.5f, 0.0f}, 0xffffffff, {1.0f, 0.0f}},
+                              {{0.5f, -0.5f, 0.0f}, 0xffffffff, {1.0f, 1.0f}},
+                              {{-0.5f, -0.5f, 0.0f}, 0xffffffff, {0.0f, 1.0f}}};
 
 // Maps the renderer bgfx selected at init to the shader binary directory
 // produced by shaders/Makefile (build/shaders/<api>/).
@@ -67,22 +69,24 @@ static const char *shaderAPIDir(bgfx::RendererType::Enum type) {
 int BGE::init() {
   window = initWindow();
   if (!window) {
-    std::cerr << "Failed to create GLFW window" << std::endl;
+    LogError("Failed to create GLFW window");
     return -1;
   }
-  initBGFX(window);
+  if (initBGFX(window) != 0)
+    return -1;
+  LogInfo("BGE initialized");
   return 0;
 }
 
 int BGE::run() {
   if (!shaderProgram) {
-    std::cerr << "No shader program" << std::endl;
+    LogError("No shader program");
     return -1;
   }
   bgfx::IndexBufferHandle ibh =
       bgfx::createIndexBuffer(bgfx::makeRef(indices, sizeof(indices)));
   if (!bgfx::isValid(ibh)) {
-    std::cerr << "Failed to create index buffer" << std::endl;
+    LogError("Failed to create index buffer");
     return -1;
   }
   bgfx::VertexLayout vertexLayout;
@@ -95,28 +99,48 @@ int BGE::run() {
   bgfx::VertexBufferHandle vbh = bgfx::createVertexBuffer(
       bgfx::makeRef(vertices, sizeof(vertices)), vertexLayout);
   if (!bgfx::isValid(vbh)) {
-    std::cerr << "Failed to create vertex buffer" << std::endl;
+    LogError("Failed to create vertex buffer");
     return -1;
   }
 
+  Image *image = new Image("../assets/texture.jpg");
+  bgfx::UniformHandle uniform =
+      bgfx::createUniform("textureColor", bgfx::UniformType::Sampler);
+
   bool running = true;
+  double lastFrame = 0.0, lastTime = 0.0;
+  int frame = 0;
   while (running) {
-    if (glfwWindowShouldClose(window)) {
+    if (glfwWindowShouldClose(window))
       running = false;
-    }
+
     glfwPollEvents();
+    //> FPS calculator
+    double now = glfwGetTime();
+    double deltaTime = now - lastFrame;
+    frame++;
+    if (now - lastTime >= 1.0) {
+      double fps = frame / (now - lastTime);
+      std::string title = "Window - FPS: " + std::to_string((int)fps);
+      glfwSetWindowTitle(window, title.c_str());
+      frame = 0;
+      lastTime = now;
+    }
+    //< FPS calculator
     //> Render
     bgfx::setViewRect(0, 0, 0, W_WIDTH, W_HEIGHT);
     bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x43ff64ff, 1.0f,
                        0);
+    if (bgfx::isValid(image->getTextureHandle()))
+      bgfx::setTexture(0, uniform, image->getTextureHandle());
     bgfx::setVertexBuffer(0, vbh);
     bgfx::setIndexBuffer(ibh);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A |
-                   BGFX_STATE_WRITE_Z | BGFX_STATE_DEPTH_TEST_LESS);
     bgfx::submit(0, shaderProgram->getProgramHandle());
     bgfx::frame();
     //< Render
   }
+  delete image;
+  bgfx::destroy(uniform);
   bgfx::destroy(ibh);
   bgfx::destroy(vbh);
   return 0;
@@ -150,32 +174,40 @@ int BGE::initBGFX(GLFWwindow *window) {
   init.swapChain.width = W_WIDTH;
   init.swapChain.nwh = GetNativeWindowHandle(window);
   if (!bgfx::init(init)) {
-    std::cerr << "Failed to initialize bgfx" << std::endl;
+    LogError("Failed to initialize bgfx");
     return -1;
   }
+  bgfxInitialized = true;
 
   const std::string shaderDir =
       std::string(BGE_SHADER_DIR) + "/" + shaderAPIDir(bgfx::getRendererType());
-  std::cout << "bgfx renderer: "
-            << bgfx::getRendererName(bgfx::getRendererType())
-            << " (loading shaders from " << shaderDir << ")" << std::endl;
+  LogInfo << "bgfx renderer: " << bgfx::getRendererName(bgfx::getRendererType())
+          << " (loading shaders from " << shaderDir << ")" << std::endl;
 
   shaderProgram = new ShaderProgram((shaderDir + "/vs_main.bin").c_str(),
                                     (shaderDir + "/fs_main.bin").c_str());
   if (!bgfx::isValid(shaderProgram->getProgramHandle())) {
-    std::cerr << "Failed to create program" << std::endl;
+    LogError("Failed to create program");
     delete shaderProgram;
     shaderProgram = nullptr;
     return -1;
   }
+
   return 0;
 }
 
 int BGE::shutdown() {
   delete shaderProgram;
   shaderProgram = nullptr;
-  bgfx::shutdown();
-  glfwDestroyWindow(window);
+  if (bgfxInitialized) {
+    bgfx::shutdown();
+    bgfxInitialized = false;
+  }
+  if (window) {
+    glfwDestroyWindow(window);
+    window = nullptr;
+  }
   glfwTerminate();
+  LogInfo("BGE shutdown");
   return 0;
 }
