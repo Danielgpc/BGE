@@ -40,4 +40,15 @@ typedef double f64;
 /** @brief 32-bit boolean type, used for APIs which require it */
 typedef int b32;
 
+// Shared library export/import macros
+#if defined(_WIN32)
+  #if defined(BGE_ENGINE_EXPORTS)
+    #define BGE_API __declspec(dllexport)
+  #else
+    #define BGE_API __declspec(dllimport)
+  #endif
+#else
+  #define BGE_API __attribute__((visibility("default")))
+#endif
+
 #endif // !DEFINES_H

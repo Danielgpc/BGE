@@ -5,22 +5,11 @@
 #include "image.h"
 #include "mutils.h"
 #include "shaders.h"
+#include "platform.h"
 
-#include <GLFW/glfw3.h>
 #include <Logger.h>
 #include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
-
-#ifdef _WIN32
-#define GLFW_EXPOSE_NATIVE_WIN32
-#elif __APPLE__
-#define GLFW_EXPOSE_NATIVE_COCOA
-#elif __linux__
-#define GLFW_EXPOSE_NATIVE_X11
-// Or if you use Wayland: #define GLFW_EXPOSE_NATIVE_WAYLAND
-#endif
-
-#include <GLFW/glfw3native.h>
 
 #include <iostream>
 #include <string>
@@ -67,13 +56,24 @@ static const char *shaderAPIDir(bgfx::RendererType::Enum type) {
 }
 
 int BGE::init() {
-  window = initWindow();
-  if (!window) {
-    LogError("Failed to create GLFW window");
+  if (!platformInit()) {
+    LogError("Failed to initialize platform");
     return -1;
   }
-  if (initBGFX(window) != 0)
+
+  window = (GLFWwindow *)platformCreateWindow(W_WIDTH, W_HEIGHT, "BGE");
+  if (!window) {
+    LogError("Failed to create window");
+    platformShutdown();
     return -1;
+  }
+
+  if (initBGFX(window) != 0) {
+    platformDestroyWindow((PlatformWindowHandle)window);
+    platformShutdown();
+    return -1;
+  }
+
   LogInfo("BGE initialized");
   return 0;
 }
@@ -83,12 +83,14 @@ int BGE::run() {
     LogError("No shader program");
     return -1;
   }
+
   bgfx::IndexBufferHandle ibh =
       bgfx::createIndexBuffer(bgfx::makeRef(indices, sizeof(indices)));
   if (!bgfx::isValid(ibh)) {
     LogError("Failed to create index buffer");
     return -1;
   }
+
   bgfx::VertexLayout vertexLayout;
   vertexLayout.begin()
       .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
@@ -111,23 +113,22 @@ int BGE::run() {
   double lastFrame = 0.0, lastTime = 0.0;
   int frame = 0;
   while (running) {
-    if (glfwWindowShouldClose(window))
+    if (platformWindowShouldClose((PlatformWindowHandle)window))
       running = false;
 
-    glfwPollEvents();
-    //> FPS calculator
-    double now = glfwGetTime();
+    platformPollEvents();
+
+    double now = platformGetTime();
     double deltaTime = now - lastFrame;
     frame++;
     if (now - lastTime >= 1.0) {
       double fps = frame / (now - lastTime);
       std::string title = "Window - FPS: " + std::to_string((int)fps);
-      glfwSetWindowTitle(window, title.c_str());
+      platformSetWindowTitle((PlatformWindowHandle)window, title.c_str());
       frame = 0;
       lastTime = now;
     }
-    //< FPS calculator
-    //> Render
+
     bgfx::setViewRect(0, 0, 0, W_WIDTH, W_HEIGHT);
     bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x43ff64ff, 1.0f,
                        0);
@@ -137,8 +138,8 @@ int BGE::run() {
     bgfx::setIndexBuffer(ibh);
     bgfx::submit(0, shaderProgram->getProgramHandle());
     bgfx::frame();
-    //< Render
   }
+
   delete image;
   bgfx::destroy(uniform);
   bgfx::destroy(ibh);
@@ -146,33 +147,11 @@ int BGE::run() {
   return 0;
 }
 
-GLFWwindow *BGE::initWindow() {
-  glfwInit();
-  GLFWwindow *window =
-      glfwCreateWindow(W_WIDTH, W_HEIGHT, "BGE", nullptr, nullptr);
-  return window;
-}
-
-inline void *GetNativeWindowHandle(GLFWwindow *glfwWindow) {
-#ifdef _WIN32
-  // Returns HWND (Windows)
-  return (void *)glfwGetWin32Window(glfwWindow);
-#elif __APPLE__
-  // Returns NSWindow* (macOS)
-  return (void *)glfwGetCocoaWindow(glfwWindow);
-#elif __linux__
-  // Returns Window (X11)
-  return (void *)(uintptr_t)glfwGetX11Window(glfwWindow);
-#else
-  return nullptr;
-#endif
-}
-
 int BGE::initBGFX(GLFWwindow *window) {
   bgfx::Init init;
   init.swapChain.height = W_HEIGHT;
   init.swapChain.width = W_WIDTH;
-  init.swapChain.nwh = GetNativeWindowHandle(window);
+  init.swapChain.nwh = platformGetNativeWindowHandle((PlatformWindowHandle)window);
   if (!bgfx::init(init)) {
     LogError("Failed to initialize bgfx");
     return -1;
@@ -199,15 +178,18 @@ int BGE::initBGFX(GLFWwindow *window) {
 int BGE::shutdown() {
   delete shaderProgram;
   shaderProgram = nullptr;
+
   if (bgfxInitialized) {
     bgfx::shutdown();
     bgfxInitialized = false;
   }
+
   if (window) {
-    glfwDestroyWindow(window);
+    platformDestroyWindow((PlatformWindowHandle)window);
     window = nullptr;
   }
-  glfwTerminate();
+
+  platformShutdown();
   LogInfo("BGE shutdown");
   return 0;
 }

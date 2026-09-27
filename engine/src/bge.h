@@ -4,9 +4,11 @@
 #include <GLFW/glfw3.h>
 #include <bgfx/bgfx.h>
 
+#include "defines.h"
+
 class ShaderProgram;
 
-class BGE {
+class BGE_API BGE {
 public:
   BGE();
   ~BGE();

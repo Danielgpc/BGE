@@ -6,6 +6,21 @@ UNAME := $(shell uname)
 # Build type: release (default, optimized) or debug (ASan + UBSan)
 BUILD ?= release
 
+# Platform-specific shared library settings
+ifeq ($(UNAME),Darwin)
+  SHARED_LIB_EXT = dylib
+  RPATH_FLAG = -Wl,-rpath,@loader_path/../engine
+else ifeq ($(UNAME),Linux)
+  SHARED_LIB_EXT = so
+  RPATH_FLAG = -Wl,-rpath,'$$ORIGIN/../engine'
+else ifeq ($(UNAME),Windows_NT)
+  SHARED_LIB_EXT = dll
+  RPATH_FLAG =
+else
+  SHARED_LIB_EXT = so
+  RPATH_FLAG =
+endif
+
 # Compiler and flags
 CXX = g++
 CXXFLAGS = -Wall -Wextra -D_THREAD_SAFE \
@@ -28,11 +43,11 @@ CXXFLAGS += -DBGE_DEBUG -g -O0 -fno-omit-frame-pointer \
 SAN_FLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer
 RUN_ENV = ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1
 OBJDIR = ../build/game-debug
-ENGINE_LIB = ../build/engine-debug/libengine.a
+ENGINE_LIB = ../build/engine-debug/libengine.$(SHARED_LIB_EXT)
 else
 CXXFLAGS += -DNDEBUG -O2
 OBJDIR = ../build/game
-ENGINE_LIB = ../build/engine/libengine.a
+ENGINE_LIB = ../build/engine/libengine.$(SHARED_LIB_EXT)
 endif
 
 # bgfx arch (libs built by third_party/Makefile)
@@ -45,7 +60,7 @@ endif
 BGFX_BINDIR = ../third_party/bgfx/.build/$(BGFX_ARCH)/bin
 
 LDFLAGS = \
-	$(ENGINE_LIB) \
+	-L$(dir $(ENGINE_LIB)) -lengine \
 	../build/third_party/libimgui.a \
 	../build/third_party/libglfw.a \
 	$(BGFX_BINDIR)/libbgfxRelease.a \
@@ -60,7 +75,8 @@ LDFLAGS = \
 	-framework Metal \
 	-framework QuartzCore \
 	-framework Foundation \
-	-framework OpenGL
+	-framework OpenGL \
+	$(RPATH_FLAG)
 
 # Source files
 SRCS = src/main.cc
