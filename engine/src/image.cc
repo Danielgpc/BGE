@@ -2,7 +2,7 @@
 #include "bgfx/bgfx.h"
 #include "bgfx/defines.h"
 #include "defines.h"
-#include <Logger.h>
+#include "logging.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -45,8 +45,7 @@ Image::Image(const char *filename) {
   i32 width = 0, height = 0;
   u8 *data = loadImageData(filename, width, height);
   if (!data) {
-    LogError << "Failed to load image (file not found or invalid): "
-             << filename << std::endl;
+    LogError("Failed to load image (file not found or invalid): {}", filename);
     textureHandle = BGFX_INVALID_HANDLE;
     return;
   }
@@ -58,7 +57,7 @@ Image::Image(const char *filename) {
   stbi_image_free(data);
 
   if (!bgfx::isValid(textureHandle)) {
-    LogError << "Failed to create texture: " << filename << std::endl;
+    LogError("Failed to create texture: {}", filename);
   }
 }
 

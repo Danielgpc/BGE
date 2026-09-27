@@ -1,0 +1,33 @@
+{
+  "name": "bge",
+  "version": "0.1.0",
+  "description": "BGE Game Engine",
+  "builtin-baseline": "07f4812200df3d3c931c0c8a6081d3b21fe2bf9f",
+  "dependencies": [
+    {
+      "name": "bgfx",
+      "features": ["tools"]
+    },
+    "glfw3",
+    {
+      "name": "imgui",
+      "features": ["glfw-binding", "opengl3-binding"]
+    },
+    "glm",
+    "spdlog",
+    "tracy",
+    "stb",
+    "joltphysics",
+    "flecs",
+    "meshoptimizer",
+    "basisu",
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

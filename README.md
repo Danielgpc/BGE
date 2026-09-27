@@ -1,83 +1,148 @@
 # BGE
 
-A small game engine built on [bgfx](https://bkaradzic.github.io/bgfx/), GLFW, Dear ImGui and glm.
+A small game engine built on [bgfx](https://bkaradzic.github.io/bgfx/), GLFW, Dear ImGui, glm, flecs, and Jolt Physics.
 
 ## Requirements
 
-- `git`, `make`, `cmake`
-- C++ compiler (Xcode Command Line Tools on macOS, GCC/Clang on Linux)
+- CMake 3.20+
+- Ninja (recommended) or Make
+- vcpkg (for dependency management)
+- C++20 compiler (GCC 11+, Clang 13+, MSVC 19.30+)
 
 ## Setup
 
-Clone the third-party dependencies into `third_party/`:
+### Option 1: Automated setup (recommended)
 
 ```sh
-./setup.sh
+./setup_cmake.sh
+```
+
+This will:
+1. Install vcpkg (if not found)
+2. Install all dependencies via vcpkg manifest
+3. Configure CMake with Ninja generator
+
+### Option 2: Manual setup
+
+```sh
+# Install vcpkg
+git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+~/vcpkg/bootstrap-vcpkg.sh
+
+# Install dependencies
+export VCPKG_ROOT=~/vcpkg
+$VCPKG_ROOT/vcpkg install --x-manifest-root=.
+
+# Configure
+cmake --preset=default
 ```
 
 ## Build
 
 ```sh
-make
+# Build all (Release)
+cmake --build --preset=default
+
+# Build Debug (with ASan + UBSan)
+cmake --build --preset=debug
+
+# Build Release
+cmake --build --preset=release
+
+# Or use Ninja directly
+ninja -C build
 ```
-
-This builds, in order:
-
-1. **third_party** – bgfx, bimg, bx (via genie), GLFW, ImGui, and bgfx's `shaderc` compiler
-2. **engine** – the static engine library (`build/engine/libengine.a`)
-3. **shaders** – shader sources compiled for every rendering API (see below)
-4. **game** – the game executable (`build/game/bgeTestGame`)
 
 ## Run
 
 ```sh
-make run
+# Release build
+./build/bin/bge_game
+
+# Debug build
+./build/bin/bge_game
 ```
 
-On startup bgfx picks the best renderer for your platform (e.g. Metal on macOS) and the engine loads the matching pre-compiled shader from `build/shaders/<api>/`.
+## Project Layout
+
+```
+engine/          Engine library (bge_engine)
+  src/           Source files
+game/            Game executable (bge_game)
+  src/           Entry point
+shaders/         Shader sources (.sc) + CMake compilation
+third_party/     Legacy Makefile-based deps (deprecated)
+build/           All build output (gitignored)
+  bin/           Executables & shared libs
+  lib/           Static libraries
+  shaders/       Compiled shader binaries per API
+```
 
 ## Shaders
 
 Shader sources live in `shaders/`:
-
 - `vs_*.sc` – vertex shaders
 - `fs_*.sc` – fragment shaders
 - `varying.def.sc` – attribute/varying definitions
 
-`make` compiles them with bgfx's `shaderc` into `build/shaders/`:
-
+CMake compiles them with bgfx's `shaderc` into `build/shaders/`:
 ```
 build/shaders/
-├── essl/    # OpenGL ES
-├── glsl/    # desktop OpenGL
-├── metal/   # Metal (macOS)
-└── spirv/   # Vulkan
+├── metal/    # Metal (macOS)
+├── spirv/    # SPIR-V (Vulkan)
+├── glsl/     # Desktop OpenGL
+├── essl/     # OpenGL ES
+├── dxbc/     # Direct3D 11 (Windows)
+└── dxil/     # Direct3D 12 (Windows)
 ```
 
 Only the API bgfx selects at runtime is used; the others are there so the same build works across APIs.
 
-To add a shader: create `shaders/vs_name.sc` and `shaders/fs_name.sc`, then load it in code:
+To add a shader: create `shaders/vs_name.sc` and `shaders/fs_name.sc`, they'll be auto-detected and compiled.
 
-```cpp
-ShaderProgram program(".../metal/vs_name.bin", ".../metal/fs_name.bin");
-```
+## Development
 
-(pick the directory that matches the renderer bgfx selected).
+### Presets
 
-## Project layout
+| Preset | Build Type | Sanitizers |
+|--------|------------|------------|
+| `default` | Release | No |
+| `debug` | Debug | ASan + UBSan |
+| `release` | Release | No |
+| `relwithdebinfo` | RelWithDebInfo | No |
 
-```
-engine/    engine code (window, bgfx setup, render loop, ShaderProgram)
-game/      game executable entry point
-shaders/   shader sources + Makefile for shader compilation
-third_party/  dependencies (created by setup.sh)
-build/     all build output (binaries, libraries, compiled shaders)
-```
+### Adding Dependencies
 
-## Clean
-
+Edit `vcpkg.json` and re-run:
 ```sh
-make clean
+$VCPKG_ROOT/vcpkg install --x-manifest-root=.
+cmake --preset=default
 ```
 
-Removes `build/` output for the engine, game and shaders. Third-party builds are kept (uncomment the line in the root `Makefile` to clean those too).
+### Shader Compilation
+
+Shaders are compiled as part of the build. To force recompile:
+```sh
+cmake --build --preset=default --target shaders --clean-first
+```
+
+## CI
+
+GitHub Actions workflow (`.github/workflows/ci.yml`) tests:
+- Linux (Ubuntu), macOS, Windows
+- Debug + Release builds
+- Clang-tidy static analysis
+- clang-format style check
+
+## Legacy Makefile
+
+The original Makefile-based build is still available:
+```sh
+make
+make run
+```
+But it's deprecated — use CMake for new development.
+
+## License
+
+MIT

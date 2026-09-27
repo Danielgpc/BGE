@@ -3,11 +3,11 @@
 #include "config.h"
 #include "defines.h"
 #include "image.h"
+#include "logging.h"
 #include "mutils.h"
-#include "shaders.h"
 #include "platform.h"
+#include "shaders.h"
 
-#include <Logger.h>
 #include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
 
@@ -47,15 +47,16 @@ static const char *shaderAPIDir(bgfx::RendererType::Enum type) {
     return "dxil";
   case bgfx::RendererType::Agc:
   case bgfx::RendererType::Gnm:
+  case bgfx::RendererType::Nvn:
     return "pssl";
-  case bgfx::RendererType::WebGPU:
-    return "wgsl";
   default:
     return "spirv";
   }
 }
 
 int BGE::init() {
+  bge::log::init();
+
   if (!platformInit()) {
     LogError("Failed to initialize platform");
     return -1;
@@ -149,9 +150,10 @@ int BGE::run() {
 
 int BGE::initBGFX(GLFWwindow *window) {
   bgfx::Init init;
-  init.swapChain.height = W_HEIGHT;
-  init.swapChain.width = W_WIDTH;
-  init.swapChain.nwh = platformGetNativeWindowHandle((PlatformWindowHandle)window);
+  init.resolution.width = W_WIDTH;
+  init.resolution.height = W_HEIGHT;
+  init.resolution.reset = BGFX_RESET_VSYNC;
+  init.platformData.nwh = platformGetNativeWindowHandle((PlatformWindowHandle)window);
   if (!bgfx::init(init)) {
     LogError("Failed to initialize bgfx");
     return -1;
@@ -160,8 +162,8 @@ int BGE::initBGFX(GLFWwindow *window) {
 
   const std::string shaderDir =
       std::string(BGE_SHADER_DIR) + "/" + shaderAPIDir(bgfx::getRendererType());
-  LogInfo << "bgfx renderer: " << bgfx::getRendererName(bgfx::getRendererType())
-          << " (loading shaders from " << shaderDir << ")" << std::endl;
+  LogInfo("bgfx renderer: {} (loading shaders from {})",
+          bgfx::getRendererName(bgfx::getRendererType()), shaderDir);
 
   shaderProgram = new ShaderProgram((shaderDir + "/vs_main.bin").c_str(),
                                     (shaderDir + "/fs_main.bin").c_str());
@@ -191,5 +193,6 @@ int BGE::shutdown() {
 
   platformShutdown();
   LogInfo("BGE shutdown");
+  bge::log::shutdown();
   return 0;
 }

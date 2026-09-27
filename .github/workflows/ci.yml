@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }}, ${{ matrix.build_type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build_type: Debug
+            vcpkg_triplet: x64-linux
+          - os: ubuntu-latest
+            build_type: Release
+            vcpkg_triplet: x64-linux
+          - os: macos-latest
+            build_type: Debug
+            vcpkg_triplet: x64-osx
+          - os: macos-latest
+            build_type: Release
+            vcpkg_triplet: x64-osx
+          - os: windows-latest
+            build_type: Debug
+            vcpkg_triplet: x64-windows
+          - os: windows-latest
+            build_type: Release
+            vcpkg_triplet: x64-windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ env.VCPKG_ROOT }}'
+          vcpkgGitCommitId: '07f4812200df3d3c931c0c8a6081d3b21fe2bf9f'
+          vcpkgTriplet: '${{ matrix.vcpkg_triplet }}'
+          vcpkgArguments: 'bgfx bx bimg glfw3 imgui glm spdlog tracy stb jolt-physics flecs meshoptimizer basis-universal'
+
+      - name: Configure CMake
+        run: |
+          cmake --preset=default \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build --preset=default --config ${{ matrix.build_type }}
+
+      - name: Test (smoke test)
+        if: matrix.build_type == 'Release'
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            xvfb-run -a ./build/bin/bge_game --help 2>&1 | head -20 || true
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            ./build/bin/bge_game --help 2>&1 | head -20 || true
+          else
+            ./build/bin/bge_game.exe --help 2>&1 | head -20 || true
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bge-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/bin/*
+            build/lib/*
+          retention-days: 7
+
+  clang-tidy:
+    name: Clang-Tidy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ env.VCPKG_ROOT }}'
+          vcpkgGitCommitId: '07f4812200df3d3c931c0c8a6081d3b21fe2bf9f'
+          vcpkgTriplet: 'x64-linux'
+          vcpkgArguments: 'bgfx bx bimg glfw3 imgui glm spdlog tracy stb jolt-physics flecs meshoptimizer basis-universal'
+
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+
+      - name: Configure CMake with clang-tidy
+        run: |
+          cmake --preset=default \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_CLANG_TIDY="clang-tidy;-checks=*,-google-readability-todo,-llvm-header-guard,-modernize-use-trailing-return-type,-readability-magic-numbers" \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Run clang-tidy
+        run: cmake --build --preset=default --config Debug 2>&1 | tee clang-tidy.log
+        continue-on-error: true
+
+      - name: Upload clang-tidy log
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-tidy-log
+          path: clang-tidy.log
+
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format-15
+
+      - name: Check formatting
+        run: |
+          find . -name "*.cc" -o -name "*.h" -o -name "*.cpp" -o -name "*.hpp" | \
+            xargs clang-format-15 --dry-run --Werror 2>&1 | tee format.log
