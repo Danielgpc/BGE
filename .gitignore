@@ -2,10 +2,6 @@
 build/
 compile_commands.json
 
-# vcpkg (installed packages)
-vcpkg/
-!vcpkg/scripts/buildsystems/vcpkg.cmake
-
 # IDE/Editor
 .clangd
 .vscode/
@@ -18,22 +14,9 @@ vcpkg/
 .DS_Store
 Thumbs.db
 
-# Third party (built by vcpkg now)
-third_party/
+# Third party (fetched by setup.sh)
+third_party/*
 !third_party/Makefile
-
-# CMake
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-*.cmake
-!CMakeLists.txt
-!cmake/
-!CMakePresets.json
-
-# Shader compiler cache
-*.bin
-!shaders/*.bin
 
 # Sanitizer
 asan.log

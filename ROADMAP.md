@@ -206,7 +206,7 @@
 
 | Week | Focus | Deliverable |
 |------|-------|-------------|
-| 1-2 | Build system modernization | CMake + presets, vcpkg/Conan deps, CI (GitHub Actions) |
+| 1-2 | Build system polish | Makefile CI (GitHub Actions), ccache, faster incremental builds |
 | 3-4 | Memory + Logging + Profiling | Arena allocator, Tracy integration, memory overlay |
 | 5-6 | ECS + Job System | 100k entities moving at 60fps, parallel for-each |
 | 7-8 | Asset Pipeline + Hot Reload | glTF loader, texture streaming, shader hot-reload |

@@ -233,11 +233,11 @@ int BGE::run() {
  */
 int BGE::initBGFX(GLFWwindow *window) {
   bgfx::Init init;
-  init.resolution.width = W_WIDTH;
-  init.resolution.height = W_HEIGHT;
-  init.resolution.reset = BGFX_RESET_VSYNC;
-  init.platformData.nwh =
+  init.swapChain.width = W_WIDTH;
+  init.swapChain.height = W_HEIGHT;
+  init.swapChain.nwh =
       platformGetNativeWindowHandle((PlatformWindowHandle)window);
+  init.reset = BGFX_RESET_VSYNC;
   if (!bgfx::init(init)) {
     LogError("Failed to initialize bgfx");
     return -1;
