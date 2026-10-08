@@ -25,3 +25,6 @@ ubsan.log
 # Profiling
 *.trace
 tracy-*.prof
+
+# Doxygen
+docs/*
