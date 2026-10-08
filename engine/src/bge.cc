@@ -1,3 +1,8 @@
+/**
+ * @file bge.cc
+ * @brief Implementation of the BGE engine: init, main loop and shutdown.
+ */
+
 #include "bge.h"
 
 #include "config.h"
@@ -14,23 +19,58 @@
 #include <iostream>
 #include <string>
 
+/**
+ * @def BGE_SHADER_DIR
+ * @brief Root directory containing the per-API compiled shader folders.
+ *
+ * Overridable at compile time (see shaders/Makefile); defaults to
+ * "build/shaders" when nothing was passed by the build system.
+ */
 #ifndef BGE_SHADER_DIR
 #define BGE_SHADER_DIR "build/shaders"
 #endif
 
+/** @brief Default constructor; members already have their default initializers. */
 BGE::BGE() = default;
 
+/**
+ * @brief Default destructor.
+ *
+ * Deliberately empty: resources are released only by shutdown(), which must be
+ * called explicitly by the host application.
+ */
 BGE::~BGE() = default;
 
-// Demo Square
+/**
+ * @brief Index data for the demo quad (two triangles), in vertex-buffer order.
+ *
+ * Each value is an offset into #vertices; the pattern 3,2,0 / 2,1,0 produces a
+ * counter-clockwise winding so the quad faces the camera.
+ */
 u16 indices[6] = {3, 2, 0, 2, 1, 0};
+
+/**
+ * @brief Vertex data for the demo quad: position, packed color and UVs.
+ *
+ * The quad spans [-0.5, 0.5] on X/Y, is white (0xffffffff) and maps the whole
+ * texture onto it. Layout must match the VertexLayout built in BGE::run().
+ */
 mutils::Vertex vertices[4] = {{{-0.5f, 0.5f, 0.0f}, 0xffffffff, {0.0f, 0.0f}},
                               {{0.5f, 0.5f, 0.0f}, 0xffffffff, {1.0f, 0.0f}},
                               {{0.5f, -0.5f, 0.0f}, 0xffffffff, {1.0f, 1.0f}},
                               {{-0.5f, -0.5f, 0.0f}, 0xffffffff, {0.0f, 1.0f}}};
 
-// Maps the renderer bgfx selected at init to the shader binary directory
-// produced by shaders/Makefile (build/shaders/<api>/).
+/**
+ * @brief Maps the renderer bgfx selected at init to the shader binary directory
+ *        produced by shaders/Makefile (build/shaders/<api>/).
+ *
+ * The directory name is the cross-compiled backend suffix, so the runtime picks
+ * the exact same binary format it will feed to the GPU.
+ *
+ * @param type Renderer backend chosen by bgfx during initialization.
+ * @return Directory name for that backend ("metal", "spirv", "glsl", ...);
+ *         unknown backends fall back to "spirv".
+ */
 static const char *shaderAPIDir(bgfx::RendererType::Enum type) {
   switch (type) {
   case bgfx::RendererType::Metal:
@@ -54,6 +94,17 @@ static const char *shaderAPIDir(bgfx::RendererType::Enum type) {
   }
 }
 
+/**
+ * @brief Initializes the platform, the window and bgfx, in that order.
+ *
+ * Every step undoes the previous ones on failure so the process never leaks a
+ * partially initialized subsystem:
+ * 1. platformInit() starts the windowing library.
+ * 2. The window is created with the size/title from config.h.
+ * 3. initBGFX() creates the swap chain and loads the shaders.
+ *
+ * @return 0 on success, -1 if the platform, the window or bgfx failed.
+ */
 int BGE::init() {
   bge::log::init();
 
@@ -62,7 +113,7 @@ int BGE::init() {
     return -1;
   }
 
-  window = (GLFWwindow *)platformCreateWindow(W_WIDTH, W_HEIGHT, "BGE");
+  window = (GLFWwindow *)platformCreateWindow(W_WIDTH, W_HEIGHT, W_TITLE);
   if (!window) {
     LogError("Failed to create window");
     platformShutdown();
@@ -79,6 +130,23 @@ int BGE::init() {
   return 0;
 }
 
+/**
+ * @brief Main loop: upload geometry/texture, then render one quad per frame.
+ *
+ * Setup performed once before looping:
+ * - the index buffer from #indices,
+ * - the vertex layout (position, color, UV) matching mutils::Vertex,
+ * - the vertex buffer from #vertices,
+ * - the texture from ../assets/texture.jpg and its sampler uniform.
+ *
+ * Each iteration polls events, measures the frame delta, updates the FPS text
+ * in the title bar once per second, then clears view 0, binds the texture and
+ * submits the quad before handing the frame to bgfx. GPU objects are released
+ * when the loop exits.
+ *
+ * @return 0 on success, -1 if there is no shader program or buffer creation
+ *         failed.
+ */
 int BGE::run() {
   if (!shaderProgram) {
     LogError("No shader program");
@@ -122,6 +190,8 @@ int BGE::run() {
     double now = platformGetTime();
     double deltaTime = now - lastFrame;
     frame++;
+    // Once a second, turn the accumulated frame count into an FPS reading and
+    // publish it in the window title, then reset the counters.
     if (now - lastTime >= 1.0) {
       double fps = frame / (now - lastTime);
       std::string title = "Window - FPS: " + std::to_string((int)fps);
@@ -133,6 +203,8 @@ int BGE::run() {
     bgfx::setViewRect(0, 0, 0, W_WIDTH, W_HEIGHT);
     bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x43ff64ff, 1.0f,
                        0);
+    // Only bind the texture if it actually loaded; otherwise leave slot 0 stale
+    // rather than handing bgfx an invalid handle.
     if (bgfx::isValid(image->getTextureHandle()))
       bgfx::setTexture(0, uniform, image->getTextureHandle());
     bgfx::setVertexBuffer(0, vbh);
@@ -148,12 +220,24 @@ int BGE::run() {
   return 0;
 }
 
+/**
+ * @brief Creates the bgfx swap chain for @p window and loads the shaders.
+ *
+ * The native window handle is handed to bgfx so it can render into the GLFW
+ * window. Afterwards the renderer type reported by bgfx is used to locate the
+ * matching shader directory, where ShaderProgram reads vs_main.bin and
+ * fs_main.bin. A failed program load rolls the shader program back to nullptr.
+ *
+ * @param window Window that will present the rendered frames.
+ * @return 0 on success, -1 if bgfx::init() or the shader program failed.
+ */
 int BGE::initBGFX(GLFWwindow *window) {
   bgfx::Init init;
   init.resolution.width = W_WIDTH;
   init.resolution.height = W_HEIGHT;
   init.resolution.reset = BGFX_RESET_VSYNC;
-  init.platformData.nwh = platformGetNativeWindowHandle((PlatformWindowHandle)window);
+  init.platformData.nwh =
+      platformGetNativeWindowHandle((PlatformWindowHandle)window);
   if (!bgfx::init(init)) {
     LogError("Failed to initialize bgfx");
     return -1;
@@ -177,6 +261,15 @@ int BGE::initBGFX(GLFWwindow *window) {
   return 0;
 }
 
+/**
+ * @brief Releases shader, renderer, window and platform resources.
+ *
+ * Safe to call repeatedly or after a failed init(): each step checks whether
+ * the corresponding resource exists before destroying it, and bgfx is only
+ * shut down when #bgfxInitialized says it was started.
+ *
+ * @return 0 always.
+ */
 int BGE::shutdown() {
   delete shaderProgram;
   shaderProgram = nullptr;
